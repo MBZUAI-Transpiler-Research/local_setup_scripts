@@ -388,6 +388,7 @@ class GuessAndSketch:
             return self.translate_in_chunks(
                 batch, 200, gen_kwargs
             )
+        breakpoint()
         if self.is_enc_dec:
             model_output = self.model.generate(
                 input_ids=batch.input_ids.to(device),
@@ -451,7 +452,7 @@ class GuessAndSketch:
                     input_start_idx : min(
                         input_ids.shape[-1], input_start_idx + max_length
                     ),
-                ].to(device).repeat(k, 1)
+                ].to(device).expand(k, -1)
                 attention_mask = (
                     batch["attention_mask"][
                         :,
@@ -460,7 +461,7 @@ class GuessAndSketch:
                         ),
                     ]
                     .to(device)
-                    .repeat(k, 1)
+                    .expand(k, -1)
                 )
                 # just make them all the same, this can be looser
                 prefix_start = max(0, len(chunk_pred_output.cross_attentions) - overlap_size)
@@ -525,7 +526,7 @@ class GuessAndSketch:
             seq_scores = torch.tensor([1.0] * pred_seqs.shape[0])
         # by chunk
         top_k_translations = ([])  # list of tuple (tokenized prediction, aligned_tokens, score of prediction)
-        input_ids = input_ids.repeat(pred_outputs.sequences.shape[0], 1) # repeat input_ids for num_generations times
+        input_ids = input_ids.expand(pred_outputs.sequences.shape[0], -1) # repeat input_ids for num_generations times
         existing_gens = set()
         for batch_idx, (pred_seq, pred_score) in enumerate(
             zip(pred_seqs, seq_scores)
@@ -577,7 +578,7 @@ class GuessAndSketch:
             )
         return top_k_translations
 
-    def guess(self, datapoint, predictions_folder, num_generations=100):
+    def guess(self, datapoint, predictions_folder, num_generations):
         self.model.eval()
 
         progname = datapoint["source"].split(".c")[0]
@@ -780,6 +781,8 @@ class GuessAndSketch:
         with open(f"{predictions_folder}/guess_{progname}.json", "w") as f:
             json.dump(problem_prediction, f, indent=4)
 
+        del batch
+        del pred_output
         torch.cuda.empty_cache()
         gc.collect()
 
